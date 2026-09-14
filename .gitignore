@@ -1,0 +1,6 @@
+*
+!/.gitignore
+!/runner.py
+!/.github/
+!/.github/workflows/
+!/.github/workflows/p6w3r8.yml
