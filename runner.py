@@ -20,7 +20,7 @@ VERSION = "V6R8XT"
 ARCHIVE_LIMIT = 16 * 1024 * 1024
 CONTENT_LIMIT = 64 * 1024 * 1024
 EXCLUDED = {"node_modules", "__pycache__", "artifacts", "tests"}
-SUFFIXES = {".py", ".js", ".mjs", ".cjs", ".sh", ".json", ".txt", ".onnx"}
+SUFFIXES = {".py", ".js", ".mjs", ".cjs", ".sh", ".json", ".txt", ".onnx", ".bin", ".param"}
 
 
 class InputError(Exception):
