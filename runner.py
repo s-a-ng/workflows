@@ -11,12 +11,14 @@ import stat
 import subprocess
 import sys
 import tempfile
-from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.parse import urlencode, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 import zipfile
 
-SECRET = "B5K8QD"
+ORIGIN = "H9C3RL"
+WORKER = "Q8M2VZ"
 VERSION = "V6R8XT"
+USER_AGENT = "botpool-account-worker/1.0"
 ARCHIVE_LIMIT = 16 * 1024 * 1024
 CONTENT_LIMIT = 64 * 1024 * 1024
 EXCLUDED = {"node_modules", "__pycache__", "artifacts", "tests"}
@@ -75,17 +77,43 @@ def pack(directory):
     return payload
 
 
-def download(config, digest):
-    if not re.fullmatch(r"[a-f0-9]{64}", digest):
-        raise InputError("Invalid version.")
-    url, token = config["url"], config["token"]
-    parsed = urlsplit(url)
+def control_origin():
+    origin = os.environ.get(ORIGIN, "")
+    parsed = urlsplit(origin)
     if (parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password
-            or parsed.query or parsed.fragment or not isinstance(token, str) or not token
-            or any(ord(char) < 32 for char in token)):
-        raise InputError("Invalid download configuration.")
-    request = Request(f"{url.rstrip('/')}/{digest}.zip", headers={
-        "Authorization": f"Bearer {token}", "User-Agent": "botpool-account-worker/1.0"})
+            or parsed.path or parsed.query or parsed.fragment):
+        raise InputError("Invalid control origin.")
+    return origin
+
+
+def oidc_token(origin):
+    oidc_url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
+    query = urlencode({"audience": origin + "/account-workers"})
+    request = Request(oidc_url + ("&" if "?" in oidc_url else "?") + query, headers={
+        "Authorization": "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"], "User-Agent": USER_AGENT})
+    with urlopen(request, timeout=15) as response:
+        return json.load(response)["value"]
+
+
+def package_url(origin, token, worker_id, digest):
+    body = json.dumps({"worker_id": worker_id, "bundle_sha256": digest}).encode()
+    request = Request(origin + "/api/internal/account-workers/pool/package", body, headers={
+        "Authorization": "Bearer " + token, "Content-Type": "application/json",
+        "User-Agent": USER_AGENT}, method="POST")
+    with urlopen(request, timeout=15) as response:
+        result = json.load(response)
+    if result.get("ok") is not True or not isinstance(result.get("url"), str):
+        raise InputError("Control server rejected package request.")
+    return result["url"]
+
+
+def download(url, digest):
+    parsed = urlsplit(url)
+    # Query strings are allowed: presigned URLs carry their signature there.
+    if (parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password
+            or parsed.fragment or any(ord(char) < 33 for char in url)):
+        raise InputError("Invalid download URL.")
+    request = Request(url, headers={"User-Agent": USER_AGENT})
     with build_opener(NoRedirect).open(request, timeout=60) as response:
         if response.status != 200:
             raise InputError("Unexpected download status.")
@@ -93,6 +121,14 @@ def download(config, digest):
     if len(payload) > ARCHIVE_LIMIT or hashlib.sha256(payload).hexdigest() != digest:
         raise InputError("Archive integrity check failed.")
     return payload
+
+
+def fetch(digest):
+    if not re.fullmatch(r"[a-f0-9]{64}", digest):
+        raise InputError("Invalid version.")
+    origin = control_origin()
+    url = package_url(origin, oidc_token(origin), os.environ[WORKER], digest)
+    return download(url, digest)
 
 
 def execute(payload):
@@ -112,9 +148,7 @@ def execute(payload):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(archive.read(entry))
             path.chmod(0o700 if (entry.external_attr >> 16) & 0o111 else 0o600)
-        env = dict(os.environ)
-        env.pop(SECRET, None)
-        result = subprocess.run(["bash", str(Path(directory, "run.sh"))], cwd=directory, env=env,
+        result = subprocess.run(["bash", str(Path(directory, "run.sh"))], cwd=directory,
                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return result.returncode if result.returncode >= 0 else 128 - result.returncode
 
@@ -135,8 +169,7 @@ def main():
                 output.write(payload)
             print(hashlib.sha256(payload).hexdigest())
             return 0
-        config = json.loads(os.environ.pop(SECRET))
-        code = execute(download(config, os.environ[VERSION]))
+        code = execute(fetch(os.environ[VERSION]))
         print(f"Finished with exit code {code}.")
         return code
     except InputError as error:

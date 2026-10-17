@@ -26,5 +26,4 @@ jobs:
           H9C3RL: ${{ secrets.H9C3RL }}
           Q8M2VZ: ${{ inputs.r9x4m2 }}
           V6R8XT: ${{ inputs.c8n5hw }}
-          B5K8QD: ${{ secrets.S8V2QM }}
           P4D7NS: ${{ secrets.P4D7NS }}
