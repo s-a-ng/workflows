@@ -21,9 +21,19 @@ jobs:
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
+      - id: c
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/pip
+          key: p1
       - run: python3 runner.py run
         env:
           H9C3RL: ${{ secrets.H9C3RL }}
           Q8M2VZ: ${{ inputs.r9x4m2 }}
           V6R8XT: ${{ inputs.c8n5hw }}
           P4D7NS: ${{ secrets.P4D7NS }}
+      - if: always() && steps.c.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/pip
+          key: p1
