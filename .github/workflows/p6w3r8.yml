@@ -22,10 +22,11 @@ jobs:
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
-      # The Playwright Python image ships no Node.js; the bundle's setup needs node and npm.
+      # The Playwright Python image ships no Node.js or venv; the bundle's setup needs both.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: apt-get update -qq && apt-get install -y -qq --no-install-recommends python3-venv
       - id: c
         uses: actions/cache/restore@v4
         with:
