@@ -20,6 +20,9 @@ jobs:
     runs-on: ubuntu-24.04
     container: mcr.microsoft.com/playwright/python@sha256:f48dffadeef431c469ddb4d3325abaa084a855cc2ef7c89c9c44537acca23a2b
     timeout-minutes: 360
+    # Firefox refuses to run as root when $HOME (Actions sets /github/home) is owned by another user.
+    env:
+      HOME: /root
     steps:
       - uses: actions/checkout@v4
       # The Playwright Python image ships no Node.js or venv; the bundle's setup needs both.
